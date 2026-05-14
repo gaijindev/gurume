@@ -555,3 +555,69 @@ class TestMcpCommand:
                 port=9001,
                 path="/api/mcp",
             )
+
+
+class TestPriceSort:
+    """Test client-side price sorting (--sort price)."""
+
+    def test_price_lower_bound_parses_lunch(self):
+        from gurume.cli import _price_lower_bound
+
+        assert _price_lower_bound("ランチ ¥1,000～¥1,999") == 1000
+
+    def test_price_lower_bound_parses_dinner(self):
+        from gurume.cli import _price_lower_bound
+
+        assert _price_lower_bound("ディナー ¥8,000～¥9,999") == 8000
+
+    def test_price_lower_bound_handles_none(self):
+        from gurume.cli import _price_lower_bound
+
+        assert _price_lower_bound(None) is None
+        assert _price_lower_bound("") is None
+        assert _price_lower_bound("no yen here") is None
+
+    def test_restaurant_min_price_picks_minimum(self):
+        from gurume.cli import _restaurant_min_price
+        from gurume.restaurant import Restaurant
+
+        r = Restaurant(
+            name="t",
+            url="https://tabelog.com/x/",
+            lunch_price="ランチ ¥1,500～¥1,999",
+            dinner_price="ディナー ¥8,000～¥9,999",
+        )
+        assert _restaurant_min_price(r) == 1500
+
+    def test_restaurant_min_price_unparseable_sinks_to_bottom(self):
+        from gurume.cli import _restaurant_min_price
+        from gurume.restaurant import Restaurant
+
+        r = Restaurant(name="t", url="https://tabelog.com/x/")
+        assert _restaurant_min_price(r) == 10**9
+
+    def test_sort_price_reorders_results(self):
+        from typer.testing import CliRunner
+
+        from gurume.cli import app
+        from gurume.restaurant import Restaurant
+
+        rs = [
+            Restaurant(name="expensive", url="https://tabelog.com/x/1/", dinner_price="ディナー ¥15,000～¥19,999"),
+            Restaurant(name="cheap", url="https://tabelog.com/x/2/", lunch_price="ランチ ¥999以下"),
+            Restaurant(name="midrange", url="https://tabelog.com/x/3/", lunch_price="ランチ ¥2,000～¥2,999"),
+        ]
+        response = SearchResponse(status=SearchStatus.SUCCESS, restaurants=rs)
+        runner = CliRunner()
+        with patch("gurume.cli.SearchRequest") as mock_request_class:
+            mock_request_class.return_value.search_sync.return_value = response
+            result = runner.invoke(
+                app,
+                ["search", "--area", "日本橋", "--sort", "price", "-o", "json", "--limit", "3"],
+            )
+
+        assert result.exit_code == 0
+        # Strip the leading "搜尋中..." status line so json.loads sees pure JSON.
+        out = result.stdout
+        payload = json.loads(out[out.index("[") :])
+        assert [r["name"] for r in payload] == ["cheap", "midrange", "expensive"]
