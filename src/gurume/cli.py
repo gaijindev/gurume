@@ -14,6 +14,7 @@ from rich.table import Table
 from .area_mapping import get_area_slug
 from .genre_mapping import get_all_genres
 from .genre_mapping import get_genre_code
+from .restaurant import PriceRange
 from .restaurant import SortType
 from .search import SearchRequest
 
@@ -98,6 +99,14 @@ def search(
     keyword: Annotated[str | None, typer.Option("--keyword", "-k", help="關鍵字（例如：寿司、ラーメン）")] = None,
     cuisine: Annotated[str | None, typer.Option("--cuisine", "-c", help="料理類別（例如：すき焼き、寿司）")] = None,
     sort: Annotated[SortOption, typer.Option("--sort", "-s", help="排序方式")] = SortOption.RANKING,
+    price_range: Annotated[
+        str | None,
+        typer.Option(
+            "--price-range",
+            "-p",
+            help="預算範圍 Tabelog 代碼，例如 B001 (午餐 ¥999 以下)、C002 (晚餐 ¥1,000-1,999)",
+        ),
+    ] = None,
     limit: Annotated[int, typer.Option("--limit", "-n", min=1, help="顯示結果數量")] = 20,
     output: Annotated[OutputFormat, typer.Option("--output", "-o", help="輸出格式")] = OutputFormat.TABLE,
 ) -> None:
@@ -119,6 +128,15 @@ def search(
         status_console.print(f"[yellow]警告：無法精準映射地區「{area}」，搜尋結果可能包含其他地區[/yellow]")
     sort_type = SORT_TYPE_MAP[sort]
 
+    price_range_enum: PriceRange | None = None
+    if price_range is not None:
+        try:
+            price_range_enum = PriceRange(price_range)
+        except ValueError:
+            valid = ", ".join(p.value for p in PriceRange)
+            status_console.print(f"[red]錯誤：無效的預算代碼「{price_range}」。可用代碼：{valid}[/red]")
+            raise typer.Exit(1) from None
+
     # Execute search.
     status_console.print("[green]搜尋中...[/green]")
     request = SearchRequest(
@@ -126,6 +144,7 @@ def search(
         keyword=keyword,
         genre_code=genre_code,
         sort_type=sort_type,
+        price_range=price_range_enum,
         max_pages=1,
     )
 

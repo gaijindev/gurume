@@ -76,6 +76,50 @@ CITY_AREA_PATH_MAPPING = {
     "神戸": "hyogo/A2801",
 }
 
+# Sub-area Tabelog paths. These narrow searches to a specific neighborhood within a city.
+# Codes are taken from Tabelog's URL structure (e.g. tokyo/A1302/A130202 for Nihonbashi).
+SUB_AREA_PATH_MAPPING = {
+    # Tokyo: A1301 — Ginza/Shimbashi/Yurakucho area.
+    "銀座": "tokyo/A1301/A130101",
+    "新橋": "tokyo/A1301/A130103",
+    "有楽町": "tokyo/A1301/A130102",
+    # Tokyo: A1302 — Tokyo Station / Nihonbashi area.
+    "丸の内": "tokyo/A1302/A130201",
+    "大手町": "tokyo/A1302/A130201",
+    "日本橋": "tokyo/A1302/A130202",
+    "京橋": "tokyo/A1302/A130202",
+    "茅場町": "tokyo/A1302/A130203",
+    "八丁堀": "tokyo/A1302/A130203",
+    "人形町": "tokyo/A1302/A130204",
+    "小伝馬町": "tokyo/A1302/A130204",
+    # Tokyo: A1303 — Roppongi/Azabu/Hiroo.
+    "六本木": "tokyo/A1307/A130701",
+    "麻布": "tokyo/A1307/A130702",
+    "広尾": "tokyo/A1307/A130703",
+    # Tokyo: A1304 — Shinjuku/Yotsuya.
+    "新宿": "tokyo/A1304/A130401",
+    "四谷": "tokyo/A1309/A130901",
+    # Tokyo: A1305 — Ikebukuro.
+    "池袋": "tokyo/A1305/A130501",
+    # Tokyo: A1306 — Harajuku/Aoyama/Shibuya.
+    "渋谷": "tokyo/A1303/A130301",
+    "原宿": "tokyo/A1306/A130603",
+    "表参道": "tokyo/A1306/A130603",
+    "青山": "tokyo/A1306/A130602",
+    # Tokyo: A1311 — Ueno/Asakusa.
+    "上野": "tokyo/A1311/A131101",
+    "浅草": "tokyo/A1311/A131102",
+    # Tokyo: A1314 — Shinagawa.
+    "品川": "tokyo/A1314/A131401",
+    # Osaka.
+    "梅田": "osaka/A2701/A270101",
+    "難波": "osaka/A2701/A270202",
+    "心斎橋": "osaka/A2701/A270201",
+    # Kyoto.
+    "祇園": "kyoto/A2601/A260301",
+    "河原町": "kyoto/A2601/A260301",
+}
+
 # Reverse lookup from prefecture names without suffixes to slugs.
 _PREFIX_TO_SLUG = {}
 for full_name, slug in PREFECTURE_MAPPING.items():
@@ -88,6 +132,10 @@ for full_name, slug in PREFECTURE_MAPPING.items():
 
 
 def _lookup_area_path(area_name: str) -> str | None:
+    # Sub-area lookup runs first so neighborhood names like "日本橋" resolve to the narrow
+    # Tabelog path rather than the broader city slug.
+    if area_name in SUB_AREA_PATH_MAPPING:
+        return SUB_AREA_PATH_MAPPING[area_name]
     if area_name in PREFECTURE_MAPPING:
         return PREFECTURE_MAPPING[area_name]
     if area_name in CITY_MAPPING:

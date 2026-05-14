@@ -63,8 +63,8 @@ class TestIntegration:
         # Verify the request was made correctly
         mock_get.assert_called_once()
         call_args = mock_get.call_args
-        assert call_args[1]["url"] == "https://tabelog.com/rst/rstsearch"
-        assert call_args[1]["params"]["sa"] == "銀座"
+        assert call_args[1]["url"] == "https://tabelog.com/tokyo/A1301/A130101/rstLst/"
+        assert "sa" not in call_args[1]["params"]
         assert call_args[1]["params"]["sk"] == "寿司"
         assert int(call_args[1]["params"]["svps"]) == 2
         assert call_args[1]["params"]["SrtT"] == "rt"
@@ -125,7 +125,8 @@ class TestIntegration:
         mock_get.assert_called_once()
         call_args = mock_get.call_args
         params = call_args[1]["params"]
-        assert params["sa"] == "渋谷"
+        assert call_args[1]["url"] == "https://tabelog.com/tokyo/A1303/A130301/rstLst/"
+        assert "sa" not in params
         assert params["sk"] == "焼肉"
         assert params["svd"] == "20250715"
         assert params["svt"] == "1900"

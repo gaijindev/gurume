@@ -15,6 +15,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from .area_mapping import get_area_slug
+from .restaurant import PriceRange
 from .restaurant import Restaurant
 from .restaurant import RestaurantSearchRequest
 from .restaurant import SortType
@@ -179,6 +180,7 @@ class SearchRequest:
     reservation_time: str | None = None
     party_size: int | None = None
     sort_type: SortType = SortType.STANDARD
+    price_range: PriceRange | None = None
     page: int = 1
 
     # Additional search configuration.
@@ -285,6 +287,7 @@ class SearchRequest:
             reservation_time=self.reservation_time,
             party_size=self.party_size,
             sort_type=self.sort_type,
+            price_range=self.price_range,
             page=page,
         )
 

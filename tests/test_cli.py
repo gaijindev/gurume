@@ -454,8 +454,42 @@ class TestSearchCommand:
             keyword=None,
             genre_code="RC1901",
             sort_type=SortType.RANKING,
+            price_range=None,
             max_pages=1,
         )
+
+    def test_price_range_flag_passed_through(self):
+        from typer.testing import CliRunner
+
+        from gurume.cli import app
+        from gurume.restaurant import PriceRange
+
+        response = SearchResponse(
+            status=SearchStatus.SUCCESS,
+            restaurants=[Restaurant(name="店", url="https://tabelog.com/tokyo/A1302/A130202/1/")],
+        )
+        runner = CliRunner()
+        with patch("gurume.cli.SearchRequest") as mock_request_class:
+            mock_request_class.return_value.search_sync.return_value = response
+            result = runner.invoke(
+                app,
+                ["search", "--area", "日本橋", "--price-range", "B001", "--limit", "1"],
+            )
+
+        assert result.exit_code == 0
+        _, kwargs = mock_request_class.call_args
+        assert kwargs["price_range"] == PriceRange.LUNCH_UNDER_1000
+
+    def test_price_range_invalid_value_errors(self):
+        from typer.testing import CliRunner
+
+        from gurume.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["search", "--area", "東京", "--price-range", "ZZZZ"])
+
+        assert result.exit_code != 0
+        assert "無效的預算代碼" in result.output
 
 
 # ============================================================================
