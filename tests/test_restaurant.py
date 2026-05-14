@@ -108,8 +108,9 @@ class TestRestaurantSearchRequest:
         # Check that httpx.get was called with correct parameters
         mock_get.assert_called_once()
         call_args = mock_get.call_args
-        assert call_args[1]["url"] == "https://tabelog.com/rst/rstsearch"
-        assert call_args[1]["params"]["sa"] == "銀座"
+        # 銀座 maps to the Ginza sub-area path; "sa" param is moved into the URL.
+        assert call_args[1]["url"] == "https://tabelog.com/tokyo/A1301/A130101/rstLst/"
+        assert "sa" not in call_args[1]["params"]
         assert call_args[1]["params"]["sk"] == "寿司"
         assert int(call_args[1]["params"]["svps"]) == 2
         assert call_args[1]["follow_redirects"] is True

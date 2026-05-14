@@ -3,6 +3,7 @@
 from gurume.area_mapping import CITY_AREA_PATH_MAPPING
 from gurume.area_mapping import CITY_MAPPING
 from gurume.area_mapping import PREFECTURE_MAPPING
+from gurume.area_mapping import SUB_AREA_PATH_MAPPING
 from gurume.area_mapping import get_area_slug
 
 # ============================================================================
@@ -286,6 +287,38 @@ def test_prefecture_mapping_count():
 def test_city_mapping_count():
     """Test that we have the expected number of major cities"""
     assert len(CITY_MAPPING) == 5, "Should have 5 major cities"
+
+
+def test_get_area_slug_nihonbashi():
+    """Sub-area Nihonbashi resolves to the narrow Tabelog path."""
+    assert get_area_slug("日本橋") == "tokyo/A1302/A130202"
+
+
+def test_get_area_slug_ginza():
+    assert get_area_slug("銀座") == "tokyo/A1301/A130101"
+
+
+def test_get_area_slug_shibuya():
+    assert get_area_slug("渋谷") == "tokyo/A1303/A130301"
+
+
+def test_sub_area_takes_priority_over_prefecture():
+    """Sub-area lookup runs before prefecture/city lookup."""
+    # "日本橋" is not a prefecture or city name, but verify the sub-area branch is reached
+    # by checking that the result is a nested path rather than a flat prefecture slug.
+    result = get_area_slug("日本橋")
+    assert result is not None and "/" in result
+
+
+def test_all_sub_area_paths_well_formed():
+    for name, path in SUB_AREA_PATH_MAPPING.items():
+        assert path.isascii(), f"{name} -> {path} is not ASCII"
+        parts = path.split("/")
+        assert len(parts) == 3, f"{name} -> {path} should have 3 segments"
+        prefecture_slug, large_code, small_code = parts
+        assert prefecture_slug in PREFECTURE_MAPPING.values(), f"{prefecture_slug} not a known prefecture"
+        assert large_code.startswith("A") and large_code[1:].isdigit()
+        assert small_code.startswith("A") and small_code[1:].isdigit()
 
 
 def test_city_area_path_mapping_count():

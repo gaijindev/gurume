@@ -509,14 +509,18 @@ class TestBuildSearchUrlAndParams:
         assert "sa" not in params, "area param must move into URL path"
         assert "LstG" not in params
 
-    def test_area_and_keyword_preserves_search_endpoint(self):
+    def test_area_and_keyword_uses_area_scoped_path(self):
+        """Area + keyword must use the /{area}/rstLst/ path so results stay in-region.
+
+        The global /rst/rstsearch endpoint silently ignores the ``sa`` filter once a
+        keyword is present, returning nationwide results.
+        """
         from gurume.restaurant import build_search_url_and_params
 
         url, params = build_search_url_and_params({"SrtT": "rt", "sa": "東京都", "sk": "今半"}, "tokyo", None)
-        assert url == "https://tabelog.com/rst/rstsearch"
-        assert params["sa"] == "東京都"
+        assert url == "https://tabelog.com/tokyo/rstLst/"
+        assert "sa" not in params, "area param must move into URL path"
         assert params["sk"] == "今半"
-        assert params["sw"] == "今半"
         assert "LstG" not in params
 
     def test_genre_only_uses_query_param(self):
@@ -572,8 +576,12 @@ class TestBuildSearchUrlAndParams:
         assert "LstG" not in params
         assert "sa" not in params
 
-    def test_search_request_build_url_preserves_keyword_filters(self):
-        """SearchRequest._build_url_and_params must not use mapped paths for keyword searches."""
+    def test_search_request_build_url_uses_area_cuisine_path_with_keyword(self):
+        """Area + cuisine + keyword still uses the cuisine-scoped area path.
+
+        The cuisine path segment already narrows by genre on Tabelog; the keyword is
+        retained via ``sk`` for the area page's text filter.
+        """
         from gurume.restaurant import SortType
         from gurume.search import SearchRequest
 
@@ -586,8 +594,7 @@ class TestBuildSearchUrlAndParams:
         rst_req = request._create_restaurant_request(page=1)
         url, params = request._build_url_and_params(rst_req)
 
-        assert url == "https://tabelog.com/rst/rstsearch"
-        assert params["sa"] == "東京"
+        assert url == "https://tabelog.com/tokyo/rstLst/sushi/"
+        assert "sa" not in params
         assert params["sk"] == "寿司"
-        assert params["sw"] == "寿司"
-        assert params["LstG"] == "RC0201"
+        assert "LstG" not in params

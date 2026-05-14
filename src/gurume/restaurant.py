@@ -54,20 +54,26 @@ def build_search_url_and_params(
     url = "https://tabelog.com/rst/rstsearch"
     cuisine_slug = get_cuisine_slug_by_code(genre_code) if genre_code else None
     keyword = params.get("sk")
+
+    # When an area slug is set, prefer the area-scoped /{area}/rstLst/ path even if a
+    # keyword is also provided. The global /rst/rstsearch endpoint ignores the area
+    # filter once a keyword is present, which made --area + --keyword return nationwide
+    # results.
+    if area_slug:
+        params.pop("sa", None)
+        if cuisine_slug:
+            params.pop("LstG", None)
+            return f"https://tabelog.com/{area_slug}/rstLst/{cuisine_slug}/", params
+        if genre_code:
+            params["LstG"] = genre_code
+        return f"https://tabelog.com/{area_slug}/rstLst/", params
+
     if keyword:
         params.setdefault("sw", keyword)
         if genre_code:
             params["LstG"] = genre_code
         return url, params
 
-    if area_slug and cuisine_slug:
-        params.pop("sa", None)
-        params.pop("LstG", None)
-        return f"https://tabelog.com/{area_slug}/rstLst/{cuisine_slug}/", params
-
-    if area_slug:
-        url = f"https://tabelog.com/{area_slug}/rstLst/"
-        params.pop("sa", None)
     if genre_code:
         params["LstG"] = genre_code
     return url, params
