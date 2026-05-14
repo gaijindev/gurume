@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from enum import StrEnum
 from typing import Annotated
@@ -43,6 +44,9 @@ class SortOption(StrEnum):
     REVIEW_COUNT = "review-count"
     NEW_OPEN = "new-open"
     STANDARD = "standard"
+    # Client-side ascending sort by parsed budget. Tabelog has no native price sort,
+    # so this re-orders the page after it is fetched.
+    PRICE = "price"
 
 
 SORT_TYPE_MAP = {
@@ -50,7 +54,34 @@ SORT_TYPE_MAP = {
     SortOption.REVIEW_COUNT: SortType.REVIEW_COUNT,
     SortOption.NEW_OPEN: SortType.NEW_OPEN,
     SortOption.STANDARD: SortType.STANDARD,
+    # PRICE delegates to STANDARD on the network; client re-sorts the result list.
+    SortOption.PRICE: SortType.STANDARD,
 }
+
+
+_PRICE_LOWER_BOUND_RE = re.compile(r"¥(\d[\d,]*)")
+
+
+def _price_lower_bound(price_text: str | None) -> int | None:
+    """Return the lower yen bound of a Tabelog budget string, or None.
+
+    Tabelog renders budgets as e.g. "ランチ ¥1,000～¥1,999" or "ディナー ¥4,000～¥4,999".
+    The first ¥-prefixed number is the lower bound.
+    """
+    if not price_text:
+        return None
+    match = _PRICE_LOWER_BOUND_RE.search(price_text)
+    if not match:
+        return None
+    return int(match.group(1).replace(",", ""))
+
+
+def _restaurant_min_price(r) -> int:
+    """Sort key: minimum of parsed lunch/dinner lower bounds, or +inf if neither parses."""
+    candidates = [
+        v for v in (_price_lower_bound(r.lunch_price), _price_lower_bound(r.dinner_price)) if v is not None
+    ]
+    return min(candidates) if candidates else 10**9
 
 
 def _resolve_genre_code(
@@ -159,7 +190,10 @@ def search(
         raise typer.Exit(0)
 
     # Limit result count.
-    restaurants = response.restaurants[:limit]
+    fetched = response.restaurants
+    if sort == SortOption.PRICE:
+        fetched = sorted(fetched, key=_restaurant_min_price)
+    restaurants = fetched[:limit]
 
     # Output results.
     if output == OutputFormat.JSON:
