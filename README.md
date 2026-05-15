@@ -14,7 +14,10 @@ Search by area, cuisine, date, and party size; parse structured detail pages; an
 ## ✨ Features
 
 - 🔍 Search restaurants by area, keyword, cuisine, date, time, and party size
-- 🍣 Filter by 29 supported Japanese cuisine categories with stable Tabelog genre codes
+- 🏘️ **Neighborhood-level area filtering** (日本橋, 銀座, 渋谷, 梅田, 祇園, and ~30 more) — narrow to a Tabelog sub-area, not just a prefecture or city
+- 🍣 Filter by **174 cuisine categories** (harvested from Tabelog's 2026 category index), including buffet (ビュッフェ・バイキング), regional/ethnic, and specialty cuisines with stable Tabelog genre codes
+- 💴 **Budget filter** (`--price-range`) maps to Tabelog's native `LstCos` bands (B001 lunch ≤¥999 through C012 dinner ≥¥30,000)
+- 📈 **Client-side price sort** (`--sort price`) ranks results ascending by parsed budget
 - 📄 Parse restaurant detail pages into structured review, menu, and course data
 - ⚡ Use synchronous and asynchronous Python APIs
 - 🖥️ Run an interactive TUI with area suggestions, keyword suggestions, and cuisine auto-detection
@@ -59,6 +62,12 @@ gurume search --area 東京 --keyword 寿司
 # Search with a precise cuisine filter
 gurume search --area 三重 --cuisine すき焼き
 
+# Neighborhood-scoped search (resolves to /tokyo/A1302/A130202/ on Tabelog)
+gurume search --area 日本橋 --cuisine ビュッフェ
+
+# Find the cheapest lunch buffets in Nihonbashi (budget band + ascending price)
+gurume search --area 日本橋 --cuisine ビュッフェ --price-range B002 --sort price
+
 # Change sort order and output format
 gurume search --area 大阪 --cuisine ラーメン --sort ranking --output json
 
@@ -74,12 +83,13 @@ gurume mcp
 
 Current `gurume search` options:
 
-- `--area`, `-a`
-- `--keyword`, `-k`
-- `--cuisine`, `-c`
-- `--sort`, `-s`: `ranking`, `review-count`, `new-open`, `standard`
+- `--area`, `-a` — prefecture (`東京`, `大阪`), major city (`札幌`, `名古屋`, `神戸`), or neighborhood (`日本橋`, `銀座`, `渋谷`, `梅田`, `祇園`, …)
+- `--keyword`, `-k` — free-text keyword (combined with `--area` it stays in-region — fixes the legacy nationwide-leak)
+- `--cuisine`, `-c` — any of the 174 supported names; see `gurume list-cuisines`
+- `--price-range`, `-p` — Tabelog budget code: `B001`–`B012` for lunch (¥999 → ¥30,000+), `C001`–`C012` for dinner
+- `--sort`, `-s` — `ranking`, `review-count`, `new-open`, `standard`, or `price` (client-side ascending by parsed budget)
 - `--limit`, `-n`
-- `--output`, `-o`: `table`, `json`, `simple`
+- `--output`, `-o` — `table`, `json`, `simple`
 
 Notes:
 
