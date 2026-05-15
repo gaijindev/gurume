@@ -59,7 +59,8 @@ SORT_TYPE_MAP = {
 }
 
 
-_PRICE_LOWER_BOUND_RE = re.compile(r"¥(\d[\d,]*)")
+# Match both half-width ¥ (search list pages) and full-width ￥ (detail pages).
+_PRICE_LOWER_BOUND_RE = re.compile(r"[¥￥](\d[\d,]*)")
 
 
 def _price_lower_bound(price_text: str | None) -> int | None:
@@ -74,6 +75,45 @@ def _price_lower_bound(price_text: str | None) -> int | None:
     if not match:
         return None
     return int(match.group(1).replace(",", ""))
+
+
+def _enrich_with_detail_prices(restaurants: Sequence, *, concurrency: int = 5) -> list:
+    """Fill in ``lunch_price``/``dinner_price`` by fetching each restaurant's detail page.
+
+    Tabelog's search list pages omit budgets for many restaurants, so ``--sort price``
+    alone often can't rank them. This helper hits each detail page in parallel using
+    the existing ``RestaurantDetailRequest`` parser (which already extracts the budget
+    block), and returns a NEW list of Restaurant objects with their price fields
+    populated when the detail page provides them. Restaurants whose detail fetch
+    fails are returned unchanged.
+    """
+    import asyncio
+    from dataclasses import replace
+
+    from .detail import RestaurantDetailRequest
+
+    async def _one(sem: asyncio.Semaphore, r):
+        async with sem:
+            try:
+                detail = await RestaurantDetailRequest(
+                    restaurant_url=r.url,
+                    fetch_reviews=False,
+                    fetch_menu=False,
+                    fetch_courses=False,
+                ).fetch()
+            except Exception:  # noqa: BLE001 — best-effort enrichment, keep the row
+                return r
+            lunch = r.lunch_price or detail.restaurant.lunch_price
+            dinner = r.dinner_price or detail.restaurant.dinner_price
+            if lunch == r.lunch_price and dinner == r.dinner_price:
+                return r
+            return replace(r, lunch_price=lunch, dinner_price=dinner)
+
+    async def _all():
+        sem = asyncio.Semaphore(concurrency)
+        return await asyncio.gather(*[_one(sem, r) for r in restaurants])
+
+    return asyncio.run(_all())
 
 
 def _restaurant_min_price(r) -> int:
@@ -138,6 +178,21 @@ def search(
             help="預算範圍 Tabelog 代碼，例如 B001 (午餐 ¥999 以下)、C002 (晚餐 ¥1,000-1,999)",
         ),
     ] = None,
+    enrich: Annotated[
+        bool,
+        typer.Option(
+            "--enrich-from-detail/--no-enrich",
+            "-E",
+            help=(
+                "搜尋結果再抓取每家餐廳的詳細頁，填入準確的午餐／晚餐預算。"
+                " --sort price 在 list-page 沒有預算時非常有用，但會多送 N 個 HTTP 請求。"
+            ),
+        ),
+    ] = False,
+    enrich_concurrency: Annotated[
+        int,
+        typer.Option("--enrich-concurrency", min=1, max=20, help="並發抓取詳細頁的最大連線數"),
+    ] = 5,
     limit: Annotated[int, typer.Option("--limit", "-n", min=1, help="顯示結果數量")] = 20,
     output: Annotated[OutputFormat, typer.Option("--output", "-o", help="輸出格式")] = OutputFormat.TABLE,
 ) -> None:
@@ -189,8 +244,16 @@ def search(
         status_console.print("[yellow]沒有找到餐廳[/yellow]")
         raise typer.Exit(0)
 
-    # Limit result count.
+    # Optionally enrich each row with prices fetched from the detail page.
+    # Useful because Tabelog list pages don't expose budgets for many results,
+    # which makes --sort price a no-op without enrichment.
     fetched = response.restaurants
+    if enrich:
+        status_console.print(
+            f"[green]從詳細頁抓取預算 ({len(fetched)} 家，並發 {enrich_concurrency})...[/green]"
+        )
+        fetched = _enrich_with_detail_prices(fetched, concurrency=enrich_concurrency)
+
     if sort == SortOption.PRICE:
         fetched = sorted(fetched, key=_restaurant_min_price)
     restaurants = fetched[:limit]
