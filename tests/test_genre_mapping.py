@@ -206,11 +206,18 @@ def test_get_all_genres_contains_common_cuisines():
 
 
 def test_get_all_genres_count():
-    """Test that we have the expected number of genres"""
+    """Test that we have at least the expected number of genres.
+
+    Originally ``get_all_genres()`` mirrored ``GENRE_CODE_MAPPING`` (29 entries).
+    It now also includes ``EXTENDED_GENRE_CODE_MAPPING`` (the harvested 2026
+    Tabelog category index), so the count is larger.
+    """
+    from gurume.genre_mapping import EXTENDED_GENRE_CODE_MAPPING
+
     genres = get_all_genres()
-    # Should have 29 unique genres based on GENRE_CODE_MAPPING
-    assert len(genres) == len(GENRE_CODE_MAPPING)
-    assert len(genres) == 29
+    expected = len(set(GENRE_CODE_MAPPING) | set(EXTENDED_GENRE_CODE_MAPPING))
+    assert len(genres) == expected
+    assert len(genres) >= 29
 
 
 def test_get_all_genres_sorted():
@@ -226,10 +233,14 @@ def test_get_all_genres_no_duplicates():
 
 
 def test_get_all_genres_all_in_mapping():
-    """Test that all returned genres exist in GENRE_CODE_MAPPING"""
+    """Test that all returned genres exist in one of the genre mappings"""
+    from gurume.genre_mapping import EXTENDED_GENRE_CODE_MAPPING
+
     genres = get_all_genres()
     for genre in genres:
-        assert genre in GENRE_CODE_MAPPING, f"{genre} not in GENRE_CODE_MAPPING"
+        assert genre in GENRE_CODE_MAPPING or genre in EXTENDED_GENRE_CODE_MAPPING, (
+            f"{genre} not in any genre mapping"
+        )
 
 
 # ============================================================================
@@ -340,11 +351,71 @@ def test_get_cuisine_slug_by_code_unknown_code():
     assert get_cuisine_slug_by_code("RC9999") is None
 
 
-def test_cuisine_slug_mapping_covers_all_genres():
-    """Every supported cuisine must have a unique path segment."""
+def test_cuisine_slug_mapping_covers_legacy_genres():
+    """Every legacy cuisine must have a unique path segment.
+
+    Extended cuisines (from EXTENDED_GENRE_CODE_MAPPING) intentionally do not
+    require a path segment — area+cuisine searches for them fall back to the
+    ``LstG`` query param via ``build_search_url_and_params``.
+    """
     assert len(CUISINE_SLUG_MAPPING) == len(GENRE_CODE_MAPPING)
 
-    slugs = [get_cuisine_slug(genre) for genre in get_all_genres()]
+    slugs = [get_cuisine_slug(genre) for genre in GENRE_CODE_MAPPING]
 
     assert all(slug is not None for slug in slugs)
     assert len(slugs) == len(set(slugs))
+
+
+# ============================================================================
+# Extended genre coverage (Tabelog 2026 category index)
+# ============================================================================
+
+
+def test_buffet_genre_resolves():
+    from gurume.genre_mapping import get_genre_code
+
+    assert get_genre_code("ビュッフェ・バイキング") == "RC981001"
+
+
+def test_buffet_alias_resolves():
+    """Common short forms map through GENRE_ALIASES."""
+    from gurume.genre_mapping import get_genre_code
+
+    assert get_genre_code("ビュッフェ") == "RC981001"
+    assert get_genre_code("バイキング") == "RC981001"
+
+
+def test_extended_cuisine_examples_resolve():
+    from gurume.genre_mapping import get_genre_code
+
+    samples = {
+        "韓国料理": "RC040101",
+        "インド料理": "RC040301",
+        "メキシコ料理": "RC041101",
+        "回転寿司": "RC010202",
+        "牛タン": "RC019907",
+        "オイスターバー": "RC980602",
+    }
+    for name, code in samples.items():
+        assert get_genre_code(name) == code, f"{name} -> {get_genre_code(name)} (expected {code})"
+
+
+def test_legacy_codes_still_authoritative():
+    """Names present in the legacy map MUST return the legacy short code."""
+    from gurume.genre_mapping import get_genre_code
+
+    # 寿司 is in both maps with different codes; legacy (RC0201) must win.
+    assert get_genre_code("寿司") == "RC0201"
+    assert get_genre_code("焼肉") == "RC1501"
+
+
+def test_get_all_genres_includes_extended():
+    from gurume.genre_mapping import get_all_genres
+
+    names = get_all_genres()
+    assert "ビュッフェ・バイキング" in names
+    assert "韓国料理" in names
+    # And legacy entries are still present.
+    assert "寿司" in names
+    # Total count: 29 legacy + ~149 extended, after dedup.
+    assert len(names) > 150

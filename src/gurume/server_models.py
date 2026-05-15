@@ -42,7 +42,11 @@ class CuisineOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(description="Cuisine name in Japanese")
-    code: str = Field(description="Tabelog genre code (e.g., 'RC0107')", pattern=r"^RC\d{4}$")
+    code: str = Field(
+        description="Tabelog genre code (e.g., 'RC0107', 'RC981001').",
+        # Tabelog uses RC + 2, 4, or 6 digits for top-, mid-, and leaf-level categories.
+        pattern=r"^RC\d{2,6}$",
+    )
 
 
 class SuggestionOutput(BaseModel):
