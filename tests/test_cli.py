@@ -570,6 +570,13 @@ class TestPriceSort:
 
         assert _price_lower_bound("ディナー ¥8,000～¥9,999") == 8000
 
+    def test_price_lower_bound_parses_fullwidth_yen(self):
+        """Detail pages emit full-width ￥; sort key must accept both glyphs."""
+        from gurume.cli import _price_lower_bound
+
+        assert _price_lower_bound("￥999") == 999
+        assert _price_lower_bound("￥2,000～￥2,999") == 2000
+
     def test_price_lower_bound_handles_none(self):
         from gurume.cli import _price_lower_bound
 
@@ -621,3 +628,62 @@ class TestPriceSort:
         out = result.stdout
         payload = json.loads(out[out.index("[") :])
         assert [r["name"] for r in payload] == ["cheap", "midrange", "expensive"]
+
+
+class TestEnrichFromDetail:
+    """Test --enrich-from-detail / -E flag."""
+
+    def test_enrich_fills_missing_prices(self):
+        """Restaurants without list-page prices get them filled from detail pages."""
+        from unittest.mock import AsyncMock, patch
+
+        from gurume.cli import _enrich_with_detail_prices
+        from gurume.detail import RestaurantDetail
+        from gurume.restaurant import Restaurant
+
+        rs = [
+            Restaurant(name="A", url="https://tabelog.com/x/1/"),
+            Restaurant(name="B", url="https://tabelog.com/x/2/", lunch_price="ランチ ¥500～¥999"),
+        ]
+
+        def make_detail(lp, dp):
+            return RestaurantDetail(
+                restaurant=Restaurant(name="X", url="https://tabelog.com/x/", lunch_price=lp, dinner_price=dp)
+            )
+
+        # Detail-page lunch_price/dinner_price the parser would return per URL.
+        page_prices = {
+            "https://tabelog.com/x/1/": ("ランチ ¥1,500～¥1,999", "ディナー ¥4,000～¥4,999"),
+            "https://tabelog.com/x/2/": ("ランチ ¥3,000～¥3,999", None),  # existing list-page price wins
+        }
+
+        async def fake_fetch(self):
+            lp, dp = page_prices[self.restaurant_url]
+            return make_detail(lp, dp)
+
+        with patch("gurume.detail.RestaurantDetailRequest.fetch", new=fake_fetch):
+            enriched = _enrich_with_detail_prices(rs, concurrency=2)
+
+        # A had no prices -> both filled from detail.
+        assert enriched[0].lunch_price == "ランチ ¥1,500～¥1,999"
+        assert enriched[0].dinner_price == "ディナー ¥4,000～¥4,999"
+        # B had a lunch price -> kept; dinner picked up nothing -> still None.
+        assert enriched[1].lunch_price == "ランチ ¥500～¥999"
+        assert enriched[1].dinner_price is None
+
+    def test_enrich_tolerates_fetch_failure(self):
+        """If a detail fetch errors, the original row is returned unchanged."""
+        from unittest.mock import patch
+
+        from gurume.cli import _enrich_with_detail_prices
+        from gurume.restaurant import Restaurant
+
+        async def fake_fetch(self):
+            raise RuntimeError("network down")
+
+        rs = [Restaurant(name="A", url="https://tabelog.com/x/1/")]
+        with patch("gurume.detail.RestaurantDetailRequest.fetch", new=fake_fetch):
+            out = _enrich_with_detail_prices(rs, concurrency=1)
+        assert out[0].lunch_price is None
+        assert out[0].dinner_price is None
+        assert out[0].name == "A"
